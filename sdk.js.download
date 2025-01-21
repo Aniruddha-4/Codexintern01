@@ -1,0 +1,2434 @@
+var tc;
+var hideWidget = false;
+var src_tag;
+var isAuthenticatedUser = false;
+var isPageRefreshed = true;
+var widgetOpenTestId = 'widget-open-test-id';
+var aId;
+var isSecondAppOpen = false;
+var hidePrimaryChatWidget = false;
+var debug = false;
+var prefilledTextValue = '';
+var secondAppButtonClicked = false;
+var accessToken = null;
+var preChat = null;
+var fontFamily = null;
+var fontUrl = null;
+var fontStyle = null;
+var preChatCompleted = false;
+var fontList = [
+  {
+    fontName: 'Sans Serif', 
+    fontFamily: 'sans-serif', 
+    fontUrl: 'https://fonts.googleapis.com/css2?family=Open+Sans&display=swap',
+  },
+  {
+    fontName: 'Arial', 
+    fontFamily: 'Arial, sans-serif', 
+    fontUrl: 'https://fonts.googleapis.com/css2?family=Arial&display=swap',
+  },
+  {
+    fontName: 'Calibri', 
+    fontFamily: 'Calibri, sans-serif', 
+    fontUrl: 'https://fonts.cdnfonts.com/css/calibri',
+  },
+  {
+    fontName: 'Poppins', 
+    fontFamily: 'Poppins, sans-serif', 
+    fontUrl: 'https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap',
+  },
+  {
+    fontName: 'Roboto', 
+    fontFamily: 'Roboto, sans-serif', 
+    fontUrl: 'https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap',
+  },
+  {
+    fontName: 'Times New Roman', 
+    fontFamily: 'Times New Roman, serif', 
+    fontUrl: 'https://fonts.cdnfonts.com/css/times-new-roman',
+  }
+];
+var extraData = null;
+var astheticsData;
+if (typeof tc == "undefined") {
+  tc = {};
+}
+ // Check if the gipMessengerPlugin object exists, otherwise initialize it
+ if (!window.gipMessengerPlugin) {
+  window.gipMessengerPlugin = {};
+}
+
+// Define functions under gipMessengerPlugin object
+window.gipMessengerPlugin = {
+  // Function to show the chat widget
+  showChatWidget: function () {
+    window.parent.postMessage("showChatWidget", "*");
+  },
+
+  // Function to open the chat only, no widget will be shown if it's called
+  openChat: function (prefilledData) {
+    window.parent.postMessage(
+      { event: "openChat", data: prefilledData },
+      "*"
+    ); 
+  },
+
+  // Function to close the chat only, no widget will be shown if it's called
+  closeChat: function () {
+    window.parent.postMessage("closeChat", "*");
+  },
+
+  // Function to minimize the chat widget
+  minimizeChat: function () {
+    window.parent.postMessage("minimizeChat", "*");
+  },
+
+  // Function to maximize the chat widget
+  maximizeChat: function (prefilledData) {
+    window.parent.postMessage(
+      { event: "maximizeChat", data: prefilledData },
+      "*"
+    ); 
+  },
+
+  // Function to hide the chat widget
+  hideChatWidget: function () {
+    window.parent.postMessage("hideChatWidget", "*");
+  },
+  toggleChatWidget: function () {
+    window.parent.postMessage("toggleChatWidget", "*");
+  },
+
+  // Function to set user ID with data
+  setUserId: function (userIdData, extradata) {
+    // Here, userIdData is the data you want to pass along with the event
+    if(extradata){
+      window.parent.postMessage(
+        { event: "setUserId", data: userIdData, extradata: extradata  },
+        "*"
+      );
+    }
+    else{
+      window.parent.postMessage(
+        { event: "setUserId", data: userIdData },
+        "*"
+      );
+    }
+   
+  },
+  // Function to set user ID with data
+  removeUserId: function () {
+    // Here, userIdData is the data you want to pass along with the event
+    window.parent.postMessage("removeUserId", "*");
+  },
+  showSecondChat: function (appInfo) {
+    secondAppButtonClicked = true;
+    preChat=null;
+    window.parent.postMessage(
+      { event: "showSecondChat", data: appInfo },
+      "*"
+    );
+  }
+
+};
+var hostedUrl = window.location.href;
+var hostedQueryParams = new URLSearchParams(new URL(hostedUrl).search);
+if (hostedQueryParams.get('appId')) {
+  var urlObject = new URL(hostedUrl);
+  src_tag = urlObject.hostname;
+}
+else {
+  var scriptTag = document.getElementById("gs-sdk");
+  var url_tag = scriptTag.getAttribute("src");
+
+  // Find & remove protocol (http, ftp, etc.) and get domain
+  if (url_tag.indexOf("://") > -1) {
+    src_tag = url_tag.split("/")[2];
+  } else {
+    src_tag = url_tag.split("/")[0];
+  }
+  // Find & remove port number
+  src_tag = src_tag.split(":")[0];
+}
+
+var hostName = "https://gip.gupshup.io/";
+if (src_tag === "dev-web-widget.smsgupshup.dev") {
+  hostName = "https://dev-gip.smsgupshup.dev/";
+} else if (src_tag === "qa-web-widget.smsgupshup.dev") {
+  hostName = "https://qa-gip.smsgupshup.dev/";
+} else if (src_tag === "int-web-widget.nsgupshup.in") {
+  hostName = "https://console-gip.nsgupshup.in/";
+} else if (src_tag === "ig1.smsgupshup.dev") {
+  hostName = "https://ig1.smsgupshup.dev/";
+} else if (src_tag === "web-widget.gupshup.io") {
+  hostName = "https://gip.gupshup.io/";
+}
+
+sessionStorage.setItem("hostName", hostName);
+var tc = tc || {};
+tc.lib = (function () {
+  function JsonToString(obj) {
+    return btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
+  };
+  function StringToJson(str) {
+    return JSON.parse(decodeURIComponent(escape(atob(str))));
+  };
+  function initEvents(widget, msg, callback) {
+    send(widget, msg);
+    receive(callback);
+  };
+  function send(iframe_id, msg) {
+    // log(widget);
+    var frame = document.getElementById(iframe_id);
+    try {
+      // var frame = widget.getElementsByTagName('iframe')[0];
+      if (frame) {
+        frame.contentWindow.postMessage({
+          "message": msg
+        }, '*');
+      }
+    } catch (err) {
+      log(err, "error");
+    }
+  };
+  function receive(callback) {
+    var eventMethod = window.addEventListener ? "addEventListener" : "attachEvent";
+    var eventer = window[eventMethod];
+    var messageEvent = eventMethod == "attachEvent" ? "onmessage" : "message";
+    try {
+      eventer(messageEvent, function (e) {
+        // log('reading from inside',e);
+        if (e.data)
+          callback(e); //Registering custom 
+      }, false);
+    } catch (err) {
+      log('Error :' + err);
+    }
+  };
+  function uuid() {
+    function s4() {
+      return Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
+    }
+    return s4() + s4() + '-' + s4() + '-' + s4() + s4();
+  };
+  function getUrlParam(name) {
+    name = name.replace(/[\[\]]/g, "\\$&");
+    var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
+      results = regex.exec(location.search);
+    if (!results) return null;
+    if (!results[2]) return '';
+    return decodeURIComponent(results[2].replace(/\+/g, " "));
+    // return decodeURI(
+    // 	(RegExp(name + '=' + '(.+?)(&|$)').exec(location.search) || [, null])[1]
+    // );
+  };
+  function log(data, type) {
+    try {
+      if (typeof logstr == "object")
+        logstr = JSON.stringify(data)
+      var type = (type) ? type : "log";
+      if (window.console) {
+       // window.console.log(data);
+      }
+    } catch (e) { }
+  };
+  function isEmpty(obj) {
+    if (typeof obj == "undefined" || obj == "" || obj == null || obj == "null")
+      return true;
+    else if (typeof obj == "object" && Object.keys(obj).length == 0)
+      return true;
+    else if (typeof obj == "string" && obj.trim().length == 0)
+      return true;
+    return false;
+  };
+  function setCookie(cname, cvalue, exdays) {
+    var d = new Date();
+    d.setTime(d.getTime() + (exdays * 24 * 60 * 60 * 1000));
+    var expires = "expires=" + d.toUTCString();
+    document.cookie = cname + "=" + cvalue + "; " + expires;
+  };
+  function getCookie(cname) {
+    var name = cname + "=";
+    var ca = document.cookie.split(';');
+    for (var i = 0; i < ca.length; i++) {
+      var c = ca[i];
+      while (c.charAt(0) == ' ') c = c.substring(1);
+      if (c.indexOf(name) == 0) return c.substring(name.length, c.length);
+    }
+    return "";
+  };
+  function mobileDevice() {
+    if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|BB|PlayBook|IEMobile|Windows Phone|Kindle|Silk|Opera Mini/i.test(navigator.userAgent)) {
+      return true;
+    } else {
+      return false;
+    }
+  };
+  function applyCssSettings(element, styleText) {
+    if (typeof (element.style.cssText) != 'undefined') {
+      element.style.cssText += styleText; // Use += to preserve existing styles
+    } else {
+      element.setAttribute('style', styleText);
+    }
+  };
+  function bw_appear(elm, i, step, speed) {
+    var t_o;
+    //initial opacity
+    i = i || 0;
+    //opacity increment
+    step = step || 5;
+    //time waited between two opacity increments in msec
+    speed = speed || 50;
+    t_o = setInterval(function () {
+      //get opacity in decimals
+      var opacity = i / 100;
+      //set the next opacity step
+      i = i + step;
+      if (opacity > 1 || opacity < 0) {
+        elm.style.display = "block";
+        clearInterval(t_o);
+        //if 1-opaque or 0-transparent, stop
+        return;
+      }
+      //modern browsers
+      elm.style.opacity = opacity;
+      //older IE
+      elm.style.filter = 'alpha(opacity=' + opacity * 100 + ')';
+    }, speed);
+  };
+  function getXMLHttpReq() {
+    try {
+      return new XMLHttpRequest
+    } catch (e) { }
+    try {
+      return new ActiveXObject("Microsoft.XMLHTTP")
+    } catch (e) { }
+    try {
+      return new ActiveXObject("Msxml2.XMLHTTP")
+    } catch (e) { }
+    return null;
+  };
+  function xhrReq(req, cb) {
+    var xhttp = getXMLHttpReq();
+    xhttp.onreadystatechange = function () {
+      if (this.readyState == 4) {
+        if (typeof cb === "function") {
+          cb(xhttp);
+        }
+      }
+    };
+
+    xhttp.open(req.method, req.url, true);
+
+    // Set headers if they exist
+    if (req.headers) {
+      for (var header in req.headers) {
+        if (req.headers.hasOwnProperty(header)) {
+          xhttp.setRequestHeader(header, req.headers[header]);
+        }
+      }
+    }
+
+    // Send request with data if provided, otherwise send null
+    if (req.data) {
+      xhttp.send(req.data);
+    } else {
+      xhttp.send();
+    }
+  }
+
+  // Function to create XMLHttpRequest object
+  function getXMLHttpReq() {
+    if (window.XMLHttpRequest) {
+      // code for modern browsers
+      return new XMLHttpRequest();
+    } else {
+      // code for old IE browsers
+      return new ActiveXObject("Microsoft.XMLHTTP");
+    }
+  }
+
+  var icons = {
+    "persistanceMenu": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 25\" width=\"24\" height=\"25\"><path fill=CHANGECOLOR d=\"M21,12.7605C21,12.9594,20.921,13.1502,20.7803,13.2908C20.6397,13.4315,20.4489,13.5105,20.25,13.5105H3.75C3.55109,13.5105,3.36032,13.4315,3.21967,13.2908C3.07902,13.1502,3,12.9594,3,12.7605C3,12.5616,3.07902,12.3708,3.21967,12.2302C3.36032,12.0895,3.55109,12.0105,3.75,12.0105H20.25C20.4489,12.0105,20.6397,12.0895,20.7803,12.2302C20.921,12.3708,21,12.5616,21,12.7605ZM3.75,7.5105H20.25C20.4489,7.5105,20.6397,7.43148,20.7803,7.29083C20.921,7.15018,21,6.95941,21,6.7605C21,6.56159,20.921,6.37082,20.7803,6.23017C20.6397,6.08952,20.4489,6.0105,20.25,6.0105H3.75C3.55109,6.0105,3.36032,6.08952,3.21967,6.23017C3.07902,6.37082,3,6.56159,3,6.7605C3,6.95941,3.07902,7.15018,3.21967,7.29083C3.36032,7.43148,3.55109,7.5105,3.75,7.5105ZM20.25,18.0105H3.75C3.55109,18.0105,3.36032,18.0895,3.21967,18.2302C3.07902,18.3708,3,18.5616,3,18.7605C3,18.9594,3.07902,19.1502,3.21967,19.2908C3.36032,19.4315,3.55109,19.5105,3.75,19.5105H20.25C20.4489,19.5105,20.6397,19.4315,20.7803,19.2908C20.921,19.1502,21,18.9594,21,18.7605C21,18.5616,20.921,18.3708,20.7803,18.2302C20.6397,18.0895,20.4489,18.0105,20.25,18.0105Z\" transform=\"translate(0 0)\"></path></svg>",
+    "sendIcon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\"><g><path fill=CHANGECOLOR d=\"M187.11,200.95v-.23c0-.05,0-.11,0-.16a.84.84,0,0,1,.42-.47l5.74-3.31,16.24-9.37a2,2,0,0,1,.61-.29h.23a.83.83,0,0,1,.62.43,1.74,1.74,0,0,1,.11.31v.2l-.06.33-.37,2.21-.37,2.21L210,195l-.37,2.21-.38,2.29-.37,2.21-.37,2.21-.37,2.21-.4,2.39a1.08,1.08,0,0,1-.18.51.87.87,0,0,1-1.06.26l-6-2.43a.08.08,0,0,0-.11,0l-1,1.22-2.2,2.69a.76.76,0,0,1-.35.25l-.19.05h-.25a.86.86,0,0,1-.73-.86q0-2.3,0-4.61a.15.15,0,0,1,0-.09l2.5-3.07,4.43-5.42,4.36-5.34.19-.24c-.17.13-.33.26-.48.4l-3.23,2.79-3.72,3.22-3.35,2.9-3.44,3a.08.08,0,0,1-.11,0l-3.71-1.52-1.6-.66a.68.68,0,0,1-.39-.4C187.15,201.11,187.14,201,187.11,200.95Z\" transform=\"translate(-187.11 -187.13)\"></path></g></svg>",
+    "minimize": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 19 11\"><path fill=CHANGECOLOR d=\"M200,205.15l8.1-8.49a1.25,1.25,0,0,0-1.81-1.73l-7.21,7.55-7.46-7.59c-1.13-1.15-2.94.58-1.81,1.73l8.38,8.53A1.33,1.33,0,0,0,200,205.15Z\" transform=\"translate(-189.5 -194.51)\"></path></svg>",
+    "attachment": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 17.25 19.5\"><g><path fill=CHANGECOLOR d=\"M203,189.87c.34.08.69.12,1,.23a5,5,0,0,1,2,8.1c-1.09,1.18-2.22,2.31-3.34,3.46q-3.1,3.21-6.2,6.42a3.86,3.86,0,0,1-2.37,1.26l-.07,0h-.74l-.43-.1a3.8,3.8,0,0,1-1.79-6.24l.18-.19,9.38-9.71a2.68,2.68,0,0,1,2.23-.87,2.46,2.46,0,0,1,2.16,2.74,3,3,0,0,1-.86,1.81l-7.62,7.89a.61.61,0,0,1-.69.21.62.62,0,0,1-.25-1l.15-.16,7.57-7.84a1.74,1.74,0,0,0,.53-1.12,1.24,1.24,0,0,0-1.68-1.29,1.72,1.72,0,0,0-.65.41q-4.76,4.9-9.5,9.83a2.57,2.57,0,0,0,.88,4.23,2.38,2.38,0,0,0,2.39-.45,2.66,2.66,0,0,0,.26-.24l9.51-9.84a3.75,3.75,0,0,0,1.09-2.9,3.65,3.65,0,0,0-2.86-3.4,3.44,3.44,0,0,0-3.3,1.05l-7.72,8-.14.15a.57.57,0,0,1-.8,0,.62.62,0,0,1,0-.84l.13-.14q3.81-3.94,7.62-7.89a4.8,4.8,0,0,1,3-1.55l.09,0Z\" transform=\"translate(-190.12 -189.87)\"></path></g></svg>",
+    "microPhone": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\"><path fill=\"CHANGECOLOR\" d=\"M12 16.5C13.1931 16.4988 14.337 16.0243 15.1806 15.1806C16.0243 14.337 16.4988 13.1931 16.5 12V6C16.5 4.80653 16.0259 3.66193 15.182 2.81802C14.3381 1.97411 13.1935 1.5 12 1.5C10.8065 1.5 9.66193 1.97411 8.81802 2.81802C7.97411 3.66193 7.5 4.80653 7.5 6V12C7.50124 13.1931 7.97575 14.337 8.81939 15.1806C9.66303 16.0243 10.8069 16.4988 12 16.5ZM9 6C9 5.20435 9.31607 4.44129 9.87868 3.87868C10.4413 3.31607 11.2044 3 12 3C12.7956 3 13.5587 3.31607 14.1213 3.87868C14.6839 4.44129 15 5.20435 15 6V12C15 12.7956 14.6839 13.5587 14.1213 14.1213C13.5587 14.6839 12.7956 15 12 15C11.2044 15 10.4413 14.6839 9.87868 14.1213C9.31607 13.5587 9 12.7956 9 12V6ZM12.75 19.4625V22.5C12.75 22.6989 12.671 22.8897 12.5303 23.0303C12.3897 23.171 12.1989 23.25 12 23.25C11.8011 23.25 11.6103 23.171 11.4697 23.0303C11.329 22.8897 11.25 22.6989 11.25 22.5V19.4625C9.40091 19.2743 7.68728 18.4072 6.44048 17.0288C5.19368 15.6504 4.50228 13.8586 4.5 12C4.5 11.8011 4.57902 11.6103 4.71967 11.4697C4.86032 11.329 5.05109 11.25 5.25 11.25C5.44891 11.25 5.63968 11.329 5.78033 11.4697C5.92098 11.6103 6 11.8011 6 12C6 13.5913 6.63214 15.1174 7.75736 16.2426C8.88258 17.3679 10.4087 18 12 18C13.5913 18 15.1174 17.3679 16.2426 16.2426C17.3679 15.1174 18 13.5913 18 12C18 11.8011 18.079 11.6103 18.2197 11.4697C18.3603 11.329 18.5511 11.25 18.75 11.25C18.9489 11.25 19.1397 11.329 19.2803 11.4697C19.421 11.6103 19.5 11.8011 19.5 12C19.4977 13.8586 18.8063 15.6504 17.5595 17.0288C16.3127 18.4072 14.5991 19.2743 12.75 19.4625Z\"/></svg>"
+,"persistanceLeftArrow": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10.94 19.02\" width=\"18\" height=\"18\"><path fill=CHANGECOLOR d=\"M193.88,200.06l8.44,8.11a1.25,1.25,0,0,0,1.72-1.81l-7.52-7.22,7.55-7.47c1.15-1.13-.58-2.94-1.72-1.81l-8.48,8.39A1.33,1.33,0,0,0,193.88,200.06Z\" transform=\"translate(-193.53 -189.5)\"></path></svg>",
+    "persistanceRightArrow": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10.94 19.02\" width=\"18\" height=\"18\"><path fill=CHANGECOLOR d=\"M205.11,229l-8.44-8.11a1.25,1.25,0,0,0-1.72,1.81l7.52,7.22-7.55,7.47c-1.15,1.13.58,2.94,1.72,1.81l8.48-8.39A1.33,1.33,0,0,0,205.11,229Z\" transform=\"translate(-194.53 -220.49)\"></path></svg>",
+    "persistanceClose": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16.8 18.19\" width=\"18\" height=\"18\"><path fill=CHANGECOLOR d=\"M199.43,200.1l7.16-7.74c1-1.06-.61-2.64-1.6-1.58l-6.38,6.88-6.6-6.92c-1-1.05-2.6.53-1.6,1.58l7.41,7.77A1.15,1.15,0,0,0,199.43,200.1Z\" transform=\"translate(-190.1 -190.4)\"></path><path fill=CHANGECOLOR d=\"M197.57,198.92l-7.16,7.71c-1,1.06.61,2.64,1.6,1.57l6.38-6.86,6.6,6.9c1,1,2.6-.53,1.6-1.57l-7.41-7.75A1.15,1.15,0,0,0,197.57,198.92Z\" transform=\"translate(-190.1 -190.4)\"></path></svg>",
+    "mute": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" enable-background=\"new 0 0 50 50\" height=\"50px\" id=\"Layer_1\" version=\"1.1\" viewBox=\"0 0 50 50\" width=\"50px\" xml:space=\"preserve\"><line fill=\"none\" stroke=\"#000000\" stroke-linecap=\"round\" stroke-miterlimit=\"10\" stroke-width=\"2\" x1=\"32\" x2=\"42\" y1=\"20\" y2=\"30\"/><line fill=\"none\" stroke=\"#000000\" stroke-linecap=\"round\" stroke-miterlimit=\"10\" stroke-width=\"2\" x1=\"42\" x2=\"32\" y1=\"20\" y2=\"30\"/><rect fill=\"none\" height=\"50\" width=\"50\"/><rect fill=\"none\" height=\"50\" width=\"50\"/><path d=\"M10,33H3  c-1.103,0-2-0.898-2-2V19c0-1.102,0.897-2,2-2h7\" fill=\"none\" stroke=\"#000000\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\" stroke-width=\"2.08\"/><path d=\"M9.604,32.43  C9.256,32.129,9,31.391,9,30.754V19.247c0-0.637,0.256-1.388,0.604-1.689L22.274,4.926C23.905,3.27,26,3.898,26,6.327v36.988  c0,2.614-1.896,3.604-3.785,1.686L9.604,32.43z\" fill=\"none\" stroke=\"#000000\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\" stroke-width=\"1.9797\"/></svg>",
+    "unmute": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" enable-background=\"new 0 0 50 50\" height=\"50px\" id=\"Layer_1\" version=\"1.1\" viewBox=\"0 0 50 50\" width=\"50px\" xml:space=\"preserve\"><rect fill=\"none\" height=\"50\" width=\"50\"/><path d=\"M10,33H3  c-1.103,0-2-0.898-2-2V19c0-1.102,0.897-2,2-2h7\" fill=\"none\" stroke=\"#000000\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\" stroke-width=\"2.08\"/><path d=\"M9.604,32.43  C9.256,32.129,9,31.391,9,30.754V19.247c0-0.637,0.256-1.388,0.604-1.689L22.274,4.926C23.905,3.27,26,3.898,26,6.327v36.988  c0,2.614-1.896,3.604-3.785,1.686L9.604,32.43z\" fill=\"none\" stroke=\"#000000\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\" stroke-width=\"1.9797\"/><path d=\"  M30.688,19.417C33.167,20.064,35,22.32,35,25s-1.833,4.936-4.312,5.584\" fill=\"none\" stroke=\"#000000\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\" stroke-width=\"2\"/><path d=\"  M34.92,13.142C39.136,15.417,42,19.873,42,25c0,5.111-2.85,9.557-7.045,11.835\" fill=\"none\" stroke=\"#000000\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\" stroke-width=\"2\"/></svg>",
+    "chatClose": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16.8 18.19\" width=\"14\" height=\"14\"><path fill=CHANGECOLOR d=\"M199.43,200.1l7.16-7.74c1-1.06-.61-2.64-1.6-1.58l-6.38,6.88-6.6-6.92c-1-1.05-2.6.53-1.6,1.58l7.41,7.77A1.15,1.15,0,0,0,199.43,200.1Z\" transform=\"translate(-190.1 -190.4)\"></path><path fill=CHANGECOLOR d=\"M197.57,198.92l-7.16,7.71c-1,1.06.61,2.64,1.6,1.57l6.38-6.86,6.6,6.9c1,1,2.6-.53,1.6-1.57l-7.41-7.75A1.15,1.15,0,0,0,197.57,198.92Z\" transform=\"translate(-190.1 -190.4)\"></path></svg>",
+    
+  }
+  
+  return {
+    events: {
+      init: initEvents,
+      send: send,
+      receive: receive,
+    },
+    JsonToString: JsonToString,
+    StringToJson: StringToJson,
+    uuid: uuid,
+    getUrlParam: getUrlParam,
+    log: log,
+    isEmpty: isEmpty,
+    setCookie: setCookie,
+    getCookie: getCookie,
+    bw_appear: bw_appear,
+    mobileDevice: mobileDevice,
+    applyCssSettings: applyCssSettings,
+    xhrReq: xhrReq,
+    icons: icons
+  }
+})();
+
+tc.funcs = (function () {
+  var scriptTag = document.getElementById("gs-sdk");
+  sessionStorage.setItem('debug',false);
+  var userId;
+  // if (scriptTag.getAttribute("userId")) {
+  //   isAuthenticatedUser = true;
+  //   userId = scriptTag.getAttribute("userId");
+  // }
+  if (localStorage.getItem("userId")) {
+    userId = localStorage.getItem("userId");
+  }
+  
+  
+  var isWidgetUpandRunning = false,
+    isAppReady = false,
+    initEvent = "",
+    clientDomain = window.location.origin,
+    appId = undefined,
+    brand = undefined,
+    ref = undefined,
+    config = undefined,
+    wData = undefined,
+    initialized = false,
+    callbackFun = undefined,
+    version = "3",
+    senderId = undefined,
+    senderName = "User";
+  
+    if (!sessionStorage.getItem("senderId")) {
+      senderId = "anon:" + tc.lib.uuid(),
+      sessionStorage.setItem("senderId", senderId);
+    }
+    if (sessionStorage.getItem("senderId")) {
+       senderId = sessionStorage.getItem("senderId");
+    }
+    if (userId) {
+      senderId = userId;
+    }
+    if(isAuthenticatedUser === false){
+      localStorage.setItem("userId", senderId);
+    }
+
+  
+  var script = document.getElementById("gs-sdk");
+  var url_text = script.getAttribute("src");
+ // Function to apply font dynamically
+function applyFont(apiResponse) {
+     fontStyle = apiResponse.aesthetics.fontStyle ? apiResponse.aesthetics.fontStyle : 'Sans Serif'; // Get the font style from API data
+     fontFamily = 'sans-serif'; // Default font family
+
+  // Find the matching font in fontList
+  var matchedFont = fontList.find(function(font) {
+    
+    return font.fontName === fontStyle;
+  });
+  
+  if (matchedFont) {
+    fontFamily = matchedFont.fontFamily;
+
+    // Check if a fontUrl is provided for Google Fonts
+    if (matchedFont.fontUrl) {
+      loadCustomFont(matchedFont.fontUrl);
+      fontUrl = matchedFont.fontUrl;
+    }
+  } else if (apiResponse.aesthetics.fontStyle.toLowerCase()==='custom') {
+
+    // If API provides custom font details
+    loadCustomFont(apiResponse.aesthetics.fontUrl);
+    fontFamily = apiResponse.aesthetics.fontFamily; // Set the custom fontFamily
+    fontUrl = apiResponse.aesthetics.fontUrl;
+  }
+
+  // Apply fontFamily to document body or specific elements
+  document.body.style.fontFamily = fontFamily;
+}
+
+// Function to load a custom font from Google Fonts CDN
+function loadCustomFont(fontUrl) {
+  var fontLink = document.createElement('link');
+  fontLink.rel = 'stylesheet';
+  fontLink.href = fontUrl;
+  document.head.appendChild(fontLink);
+}
+
+
+  // Fetch access token function
+ function fetchAccessToken(callback,sessionId ) {
+  var req = {
+    method: "GET",
+    url: sessionStorage.getItem("hostName") + "mapper/v1/auth/" + sessionId ,
+   
+  };
+  
+  tc.lib.xhrReq(req, function (res) {
+    
+    if (res.status < 300 && res.response) {
+      var data = JSON.parse(res.response);
+      if (data.access_token) {
+        accessToken = data.access_token; // Store the access token
+        sessionStorage.setItem('access_token',accessToken)
+        if (callback) callback();
+      } else {
+        console.error('Failed to fetch access token', data);
+      }
+    } else {
+      console.error('Error in access token request', res);
+    }
+  });
+}
+
+  function extractDomain() {
+    var src_domain;
+    // Find & remove protocol (http, ftp, etc.) and get domain
+    if (url_text.indexOf("://") > -1) {
+      src_domain = url_text.split("/")[2];
+    } else {
+      src_domain = url_text.split("/")[0];
+    }
+    // Find & remove port number
+    src_domain = src_domain.split(":")[0];
+    return src_domain;
+  }
+
+  if (location.hostname.startsWith("localhost") && url_text === './WebContent/v3/demo/static/js/sdk.js') {
+    domain = "http://" + location.host + "/WebContent";
+  } else {
+    domain = "https://" + extractDomain();
+  }
+
+  function getDefaultConfig() {
+
+    var config = {
+      openMode: { text: "Virtual Assistant", height: 390, width: 320 },
+      closeMode: {
+        text: "Virtual Assistant",
+        width: 250,
+        displayType: "rectangular",
+      },
+      common: {
+        logo: "https://www.gupshup.io/images/botwidget/ic_dummy_chat_g.png",
+        imgDispType: "circular",
+        bgColor: "#E7E6FF",
+        fontSize: 16,
+        fontColor: "#fff",
+        chatBackgroundImage: "",
+      },
+      content: {
+        bot: "https://www.gupshup.io/images/botwidget/ic_bot.png",
+        botBubbleColor: "#F5F3FF",
+        botFontColor: "#797979",
+        user: "https://www.gupshup.io/images/botwidget/ic_user.png",
+        userBubbleColor: "#C7C6FF",
+        userFontColor: "#000",
+        pageTitle: "Chat Bot",
+        fontSize: 14,
+        fontFamily: "sans-serif",
+      },
+      config: {
+        persistenceMenu: {},
+        perMenuImg: "",
+        attachment: "Yes",
+        widgetType: "Text",
+        msgEnc: "No",
+        webView: "Yes",
+        RDStatus: "No",
+        isResponsive: "No",
+      },
+    };
+    return config;
+  }
+
+  function getIframeUrl() {
+    return domain + "/v3/echat/mobile.html";
+
+    //for local
+    //return domain+'/gip-widget/WebContent/v3/echat/mobile.html';
+  }
+  function getIframeUrlForBotLog() {
+    return domain + "/v3/echat/botlog.html";
+
+  }
+  function createElement(ele, ids, classes) {
+    var e = document.createElement(ele);
+    if (ids) e.id = ids;
+    if (classes) e.className = classes;
+    return e;
+  }
+  function setAttributes(ele, attribs) {
+    if (typeof attribs == "object") {
+      var keys = Object.keys(attribs);
+      for (i in attribs) {
+        ele.setAttribute(i, attribs[i]);
+      }
+    }
+  }
+
+  function appendChilds(ele) {
+    // appending all the elements in arguments to ele
+    if (arguments.length > 1) {
+      for (var i = 1; i < arguments.length; i++) {
+        ele.appendChild(arguments[i]);
+      }
+    }
+  }
+  
+
+  function toggleWidget(up) {
+    
+    if(isAuthenticatedUser){
+      
+     
+      var req = {
+        method: "GET",
+        //url: ccurl+"/api/bot/"+botkey+"/botconfig",
+        url:
+          sessionStorage.getItem("hostName") +
+          "identity/v1/app/" +
+          aId +
+          "/user/"+senderId,
+          headers: {
+            'Authorization': sessionStorage.getItem('access_token'),  // Add the Authorization header
+            'Content-Type': 'application/json'         // Optional: Specify content type
+          }
+      };
+      tc.lib.xhrReq(req, function (res) {
+       if (res.status < 300 && res.response) {
+         try{
+          var data = JSON.parse(res.response);
+          data.showPreChatForm ? preChatCompleted = false : preChatCompleted = true;
+         
+         }catch (e) {
+          }
+        }
+        else{
+          // console.log('Error')
+        }
+      })
+    }
+    else{
+      if(localStorage.getItem('preChatCompleted')==='true'){
+        preChatCompleted = true;
+      }
+      else {
+        preChatCompleted = false;
+      }
+      
+    }
+    // Check if the user has already clicked the "Get Started" button
+    
+  
+    // Show the pre-chat form if not completed
+    if(preChat && !isSecondAppOpen ){
+  
+      if(preChat.hasOwnProperty('enabled')){
+        if (preChatCompleted === false && preChat.enabled && !secondAppButtonClicked && up ) {
+          let preChatForm = document.getElementById('gs-pre-chat-form');
+          // If the pre-chat form is not present, create it
+          if (!preChatForm) {
+            var com = config.common;
+            preChatForm = document.createElement('div');
+            preChatForm.id = 'gs-pre-chat-form';
+            preChatForm.classList.add('gs-pre-chat-form');  // Use class for styling
+            preChatForm.style.fontFamily = fontFamily;
+            var viewportHeight = window.innerHeight;
+
+            // Convert 66px to vh
+            var additionalHeightInVh = (66 / viewportHeight) * 100;
+            // Dynamic height, width, and placement
+            var preChatFormHeight = config.openMode.height > 100 ? config.openMode.height + 70 + 'px' : config.openMode.height+additionalHeightInVh +'vh' ;
+            preChatForm.style.height = preChatFormHeight;
+            preChatForm.style.width = config.openMode.width + 'px';
+            preChatForm.style.zIndex = '99999';  // Set z-index
+            preChatForm.style.bottom = '25px';
+        
+            if (com.placement) {
+                if (com.placement === 'left') {
+                    preChatForm.style.left = '25px';
+                } else {
+                    preChatForm.style.right = '25px';
+                }
+            }
+        
+            // Create wrapper div for all content
+            var preChatFormWrapper = document.createElement('div');
+            preChatFormWrapper.id = 'gs-pre-chat-form-wrapper';
+            preChatFormWrapper.classList.add('gs-pre-chat-form-wrapper');  // Add a class for styling the wrapper
+           // preChatFormWrapper.style.height = preChatFormHeight;
+            preChatFormWrapper.style.display = 'flex';
+            preChatFormWrapper.style.alignItems = 'center';
+            preChatFormWrapper.style.flexDirection = 'column';
+            preChatFormWrapper.style.overflowY = 'auto';
+            // Create header image container
+            var headerImageContainer = document.createElement('div');
+            headerImageContainer.id = 'gs-header-image';
+            headerImageContainer.classList.add('gs-header-image');
+            headerImageContainer.style.height = config.openMode.width / 2 + 'px';
+            var headerImage = new Image();
+            headerImage.src = preChat.headerImage || '';  // Set the source of the header image
+            if (preChat.headerImage) {
+                headerImageContainer.appendChild(headerImage);
+                preChatFormWrapper.style.justifyContent = 'flex-start';
+            } else {
+                headerImageContainer.style.display = 'none';  // Hide if no image
+                preChatFormWrapper.style.justifyContent = 'flex-end';
+                preChatFormWrapper.style.width = '100%';
+                preChatFormWrapper.style.position = 'absolute';
+                preChatFormWrapper.style.bottom = '0';
+            }
+        
+            preChatFormWrapper.appendChild(headerImageContainer);  // Append to the wrapper
+        
+            // Create content div
+            var contentDiv = document.createElement('div');
+            contentDiv.id = 'gs-content';
+            contentDiv.classList.add('gs-content');
+            contentDiv.style.background = com.bgColor;
+        
+            var headerText = document.createElement('h2');
+            headerText.textContent = preChat.header;
+            headerText.classList.add('gs-header-text');
+            headerText.style.color = config.content.botFontColor;
+            headerText.style.fontSize = config.content.botMessageFontSize + 2 + 'px';
+            contentDiv.appendChild(headerText);
+            
+            if (!preChat.headerImage) {
+                contentDiv.style.borderRadius = "15px";
+            }
+        
+            var description = document.createElement('p');
+            description.textContent = preChat.subHeader;
+            description.classList.add('gs-description');
+            description.style.color = config.content.botFontColor;
+            description.style.fontSize = config.content.botMessageFontSize + 'px';
+            contentDiv.appendChild(description);
+        
+              // Create checkbox
+            var checkboxLabel = document.createElement('label');
+            checkboxLabel.classList.add('gs-checkbox-label');
+    
+            var checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = 'gs-terms-checkbox';
+            checkbox.classList.add('gs-checkbox');
+            checkboxLabel.appendChild(checkbox);
+    
+            // Apply dynamic styles for the checkbox including the accent-color
+            checkbox.style.width = '14px';
+            checkbox.style.height = '14px';
+            checkbox.style.accentColor = com.button.buttonBackgroundColor || com.headerColor;
+        
+            var termsDiv = document.createElement('div');
+            termsDiv.classList.add('gs-terms-wrapper');
+        
+            var acceptText = document.createElement('span');
+            acceptText.textContent = preChat.checkbox.preliminaryText + ' ';
+            acceptText.style.fontSize = config.content.botMessageFontSize + 'px';
+            acceptText.style.color = config.content.botFontColor;
+            termsDiv.appendChild(acceptText);
+        
+            var termsLink = document.createElement('a');
+            termsLink.href = preChat.checkbox.url;
+            termsLink.textContent = preChat.checkbox.hyperlinkedText;
+            termsLink.style.fontSize = config.content.botMessageFontSize + 'px';
+            termsLink.style.color = '#007BFF';
+            termsLink.target = '_blank';
+            termsLink.style.textDecoration = 'none';
+            termsLink.rel = 'noopener noreferrer';
+            termsDiv.appendChild(termsLink);
+        
+            checkboxLabel.appendChild(termsDiv);
+            contentDiv.appendChild(checkboxLabel);
+        
+            // Create submit button
+            var startButton = document.createElement('button');
+            startButton.textContent = preChat.globalButtonText;
+            startButton.id = 'gs-get-started-btn';
+            startButton.classList.add('gs-button');
+            startButton.disabled = true;
+            startButton.style.cursor = 'not-allowed';
+        
+            checkbox.addEventListener('change', function () {
+                if (checkbox.checked) {
+                    startButton.disabled = false;
+                    startButton.style.cursor = 'pointer';
+                    startButton.style.backgroundColor = com.button.buttonBackgroundColor || com.headerColor;
+                    startButton.style.border = '1px solid ' + (com.button.buttonBorderColor || com.headerColor);
+                    startButton.style.color = com.button.buttonFontColor;
+                } else {
+                    startButton.disabled = true;
+                    startButton.style.cursor = 'not-allowed';
+                    startButton.style.color = com.button.buttonFontColor;
+                }
+            });
+        
+            startButton.onclick = function () {
+                preChatForm.style.display = 'none';
+                localStorage.setItem('preChatCompleted', 'true');
+                
+                if(isAuthenticatedUser){
+                  setTimeout(function (){
+                      tc.lib.events.send("iframe_widget", 'isLoggedInUser');
+                    },100)
+                  
+                }
+                else{
+                  tc.lib.events.send("iframe_widget", 'preChatCompleted');
+                }
+            };
+        
+            contentDiv.appendChild(startButton);
+            preChatFormWrapper.appendChild(contentDiv);  // Append contentDiv to the wrapper
+        
+            preChatForm.appendChild(preChatFormWrapper);  // Append wrapper to preChatForm
+            document.body.appendChild(preChatForm);  // Append preChatForm to the body
+        }
+         else {
+            // If pre-chat form already exists, show it again
+            preChatForm.style.display = 'block';
+          }
+        }
+        }
+    }
+    
+    // Regardless of pre-chat completion, show the widget
+    showWidget();
+  
+    function showWidget() {
+      
+      if (isSecondAppOpen && !up) {
+        accessToken = null;
+        sessionStorage.setItem('access_token','');
+        isSecondAppOpen = false;
+        isPageRefreshed = false;
+        prefilledTextValue = '';
+        tc.devbox.isIframeInitialized = false;
+       // isAuthenticatedUser = true;
+        initialized = false;
+        toggleWidget(false);
+  
+        var element = document.getElementById("supportchatwidget");
+        if (element) {
+          element.parentNode.removeChild(element);
+        }
+  
+        var existingDiv = document.querySelector(".bot-log");
+        if (existingDiv) {
+          existingDiv.remove();
+          isBotLogVisible = false;
+        }
+  
+        if (!secondAppButtonClicked) {
+          AutoInitialized(document, "gs-css");
+          tc.lib.events.send("iframe_widget", "startchatevent");
+        }
+     
+       
+         // secondAppButtonClicked = false;
+        
+       
+  
+        setTimeout(function () {
+          if (hidePrimaryChatWidget) {
+            window.gipMessengerPlugin.hideChatWidget();
+          } else {
+            window.gipMessengerPlugin.showChatWidget();
+          }
+        }, 1000);
+      }
+  
+      var elements = document.getElementsByClassName("tc-widget");
+      if (up) {
+        secondAppButtonClicked = false;
+       // showNoty();
+        for (var i = 0; i < elements.length; i++) {
+          var ele = elements[i];
+          ele.classList.remove("hidewidget");
+          ele.classList.remove("widget-fadeOut");
+          ele.style.display = "block";
+        }
+        document.getElementById("widget-close").style.display = "block";
+        tc.lib.events.send("iframe_widget", "open");
+  
+        if (isWidgetUpandRunning && isAppReady) {
+          tc.lib.events.send("iframe_widget", "play");
+        } else {
+          if (initEvent) {
+            window.clearInterval(initEvent);
+          }
+          initEvent = setInterval(function () {
+            if (isWidgetUpandRunning && isAppReady) {
+              tc.lib.events.send("iframe_widget", "play");
+              clearInterval(initEvent);
+            }
+          }, 1000);
+        }
+  
+        if (!tc.devbox.isIframeInitialized) {
+          document.getElementById("iframe_widget").setAttribute("src", tc.devbox.iframeUrl);
+          tc.devbox.isIframeInitialized = true;
+        }
+  
+      } else {
+        var botLogDiv = document.getElementById("bot-log");
+        if (botLogDiv) {
+          botLogDiv.style.display = "none";
+        }
+  
+        for (var i = 0; i < elements.length; i++) {
+          var ele = elements[i];
+          if (ele.style.display != "none" && ele.getAttribute("id") != "widget-open") {
+            ele.classList.add("hidewidget");
+            ele.classList.add("widget-fadeOut");
+            setTimeout(function () {
+              document.getElementById("widget-close").style.display = "none";
+            }, 1000);
+            setTimeout(function () {
+              document.getElementById("widget").style.display = "none";
+            }, 1000);
+          }
+        }
+  
+        if (hideWidget === false) {
+          if (document.getElementById("widget-open")) {
+            document.getElementById("widget-open").style.display = "block";
+          }
+        }
+  
+        tc.lib.events.send("iframe_widget", "pause");
+        tc.lib.events.send("iframe_widget", "close");
+      }
+    }
+  }
+  
+
+
+  function showNoty(num) {
+    var x = document.getElementById("widget");
+    var y = document.getElementById("widget-open").querySelector("span.bedge");
+    if (
+      num < 1 ||
+      !(x.style.display == "none" || x.style.display == "") ||
+      isNaN(num)
+    ) {
+      y.innerText = 0;
+      y.style.display = "none";
+      return false;
+    } else {
+      y.innerText = parseInt(num) + parseInt(y.innerText);
+      y.style.display = "block";
+    }
+  }
+  function jsonToUrlEncoded(obj) {
+    var jsonString = JSON.stringify(obj);
+    return encodeURIComponent(jsonString);
+  }
+
+  function getRedirectUrl() {
+   
+    var currentDomain = "&domain=" + clientDomain;
+    var timestamp = "&timestamp=" + new Date().getTime();
+    var sendData = {
+      appId: appId,
+      debug: debug,
+      isAuthenticatedUser: isAuthenticatedUser,
+      hostName:hostName,
+      prefilledText: prefilledTextValue,
+      senderId: senderId,
+      source: encodeURIComponent(window.location.href),
+      deviceType:'WEBSITE',
+      sender: req(),
+      common: {
+        imgDispType: config.common.imgDispType,
+        bgColor: config.common.bgColor,
+        bgImage: config.content.bgImage,
+        fontColor: config.common.fontColor,
+        isMobile: tc.lib.mobileDevice(),
+        ref: tc.lib.getUrlParam("ref"),
+        width: config.openMode.width,
+        height: config.openMode.height,
+        headerColor: config.common.headerColor,
+        fontFamily: fontFamily,
+        fontUrl : fontUrl
+      },
+      content: config.content,
+      config: config.config,
+      extraData: extraData ? jsonToUrlEncoded(extraData) :''
+    };
+    /*if(config.config && config.config.attachment == "No"){
+        sendData.common["attachment"] = false;
+      }*/
+    if (wData && wData.wsurl) {
+      sendData["devbox"] = {
+        enc: false,
+        wsurl: wData.wsurl,
+      };
+    }
+    var data = tc.lib.JsonToString(sendData);
+    var url = getIframeUrl() + "?data=" + data + currentDomain + timestamp;
+
+    return url;
+  }
+
+  function getRedirectUrlForBotLog() {
+    var url = getIframeUrlForBotLog()
+    return url;
+  }
+  
+  function createIframe(divId) {   
+   
+    // Get the redirect URL
+    var url = getRedirectUrl();
+    // Create a new iframe element
+    var iframe = document.createElement("iframe");
+    //iframe.setAttribute("src", url); // Uncomment this line to set the iframe src
+    tc.devbox.iframeUrl = url;
+    iframe.setAttribute("id", "iframe_widget");
+    iframe.setAttribute("allow", "microphone");
+    // Get the div element by id
+    var div = document.getElementById(divId);
+    div.innerHTML = "";
+    // Append the new iframe to the div
+    div.appendChild(iframe);
+    
+  }
+
+  function createIframeBotLog(div) {
+    var url = getRedirectUrlForBotLog();
+    var iframe = document.createElement("iframe");
+    iframe.setAttribute("src", url);
+    tc.devbox.iframeUrl = url;
+    iframe.setAttribute("id", "iframe_widget_bot_log");
+    var div = document.getElementById(div);
+    div.innerHTML = "";
+    div.appendChild(iframe);
+  }
+
+  function supportChatMobile() {
+    var url = getRedirectUrl();
+    if (brand) {
+      if (senderId.indexOf("anon:") != -1) {
+        url = "//${gipUrl}/wpp/brand/" + brand + "?channel=widget";
+      } else {
+        url =
+          "//${gipUrl}/wpp/brand/" +
+          brand +
+          "?channel=widget&cUserId=" +
+          senderId;
+      }
+      if (ref) {
+        url = url + "&refKey=" + ref;
+      }
+    }
+  }
+  function setIconColor(icon, color) {
+    return icon.replace(/stroke="#000000"/g, 'stroke="' + color + '"');
+  }
+  function template(ele) {
+    applyFont(astheticsData);
+    tc.lib.applyCssSettings(ele, "display:none;");
+    var wc = createElement("div", "widget-close", "tc-widget widget-fadeIn");
+    var wo;
+    var wd = createElement("div", "widget", "tc-widget widget-fadeIn");
+    var reg = new RegExp("CHANGECOLOR", "g");
+    var hideSpeaker = true;
+    wd.style.backgroundColor = config.common.bgColor;
+    if (config.common.chatBackgroundImage) {
+      wd.style.backgroundImage = "url(" + config.common.chatBackgroundImage + ")";
+      wd.style.backgroundSize = "cover"; // This will make sure the background image covers the entire div
+      wd.style.backgroundPosition = "center"; // Center the background image
+    }
+    
+    if (Object.keys(config.config.speech).length) {
+      if(Object.keys(config.config.speech.textToSpeech).length){
+        config.config.speech.textToSpeech.enabled ? hideSpeaker = false : hideSpeaker = true;
+      }
+    }
+    var logoImgIcon = createElement("div", undefined, "logo-img-icon");
+    logoImgIcon.style.width = config.common.widgetIconSize.width;
+    logoImgIcon.style.height = config.common.widgetIconSize.height;
+    var img = createElement("img");
+    var wc_span1 = createElement("span", "max-msg");
+  
+    // Container for right span and audio icon
+    var rightContainer = createElement("div", undefined, "right-container");
+  
+    var wc_span2 = createElement("span", undefined, "gs-right-close-icon");
+  
+    // Speaker icon for audio on/off
+    var audioIcon = createElement("span", undefined, "audio-icon");
+    
+    audioIcon.innerHTML = setIconColor(tc.lib.icons["unmute"],config.common.fontColor); // Assuming tc.lib.icons["speaker"] contains the speaker icon SVG/HTML
+    audioIcon.addEventListener("click", function () {
+     
+      var isMuted = audioIcon.classList.toggle("muted");
+      audioIcon.innerHTML = isMuted ? setIconColor(tc.lib.icons["mute"],config.common.fontColor) : setIconColor(tc.lib.icons["unmute"],config.common.fontColor); // Toggle icon
+      if(isMuted){
+        setTimeout(function (){
+          tc.lib.events.send("iframe_widget", 'mute');
+        },100)
+        
+      }
+      else{
+        setTimeout(function(){
+          tc.lib.events.send("iframe_widget", 'unmute');
+        },100)
+        
+      }
+     
+    });
+  
+    setAttributes(img, {
+      src: config.content.bot,
+      width: '100%',
+      height: '100%',
+    });
+   
+    setAttributes(wc_span2, { onClick: "tc.funcs.toggleWidget(false)" });
+    wc_span1.innerText = config.openMode.text;
+    wc_span2.innerHTML = tc.lib.icons["chatClose"].replace(reg, config.common.fontColor);
+  
+    var wo_logoImgIcon = logoImgIcon.cloneNode(true);
+    var wo_span1 = createElement("span", "min-msg");
+    var wo_span2 = createElement("span", undefined, "bedge");
+    var wo_img = img.cloneNode(true);
+    setAttributes(wo_img, {
+      src: config.common.logo,
+    });
+    wo_span2.innerText = "0";
+    // wo_span1.innerText = config.closeMode.text;
+    var com = config.common;
+    var con = config.content;
+    var om = config.openMode;
+    var cm = config.closeMode;
+    var conf = config.config;
+    var wo_style = "";
+    if (cm.displayType == "circular") {
+      wo = createElement(
+        "div",
+        "widget-open",
+        "tc-widget widget-type circular-widget"
+      );
+      wo.setAttribute("title", cm.text);
+      
+      wo.setAttribute("data-testid", widgetOpenTestId);
+      wo_span1.style.display = "none";
+      wo_style = "border-radius: 50%;" + "width:"+config.common.widgetIconSize.width+'px;' + "height:"+config.common.widgetIconSize.height+'px';
+      if (com.placement) {
+        if (com.placement === 'left') {
+          wo_style += com?.widgetIconDistance?.side  ?  "left:"+com.widgetIconDistance.side+'px;':'left:25px;';
+          
+          wd.style.left = '25px';
+          wc.style.left = "25px";
+        } else {
+          wo_style += com.widgetIconDistance?.side ? "right:"+com.widgetIconDistance.side+'px;':'right:25px;';
+          wd.style.right = "25px";
+          wc.style.right = "25px";
+        }
+        wo_style += com?.widgetIconDistance?.bottom ? "bottom:"+com.widgetIconDistance.bottom+'px;':'bottom:25px;';
+      }
+    }
+  
+    var script = document.getElementById("gs-sdk");
+    var isFullScreen = script?.getAttribute("fullscreen") === "true";
+    if (!tc.lib.mobileDevice() && !isFullScreen) {
+      if (cm.displayType == "circular") {
+        wo = createElement(
+          "div",
+          "widget-open",
+          "tc-widget widget-type circular-widget"
+        );
+        wo.setAttribute("title", cm.text);
+        wo.setAttribute("data-testid", widgetOpenTestId);
+        wo_span1.style.display = "none";
+        wo_style =  "border-radius: 50%;" + 
+                    "background-color: " + com.bgColor + ";" + 
+                    "width: " + config.common.widgetIconSize.width + "px;" + 
+                    "height: " + config.common.widgetIconSize.height + "px;";
+        if (com.placement) {
+          if (com.placement === "left") {
+            wo_style += com?.widgetIconDistance?.side  ?  "left:"+com.widgetIconDistance.side+'px;':'left:25px;';
+            wd.style.left = "25px";
+            wc.style.left = "25px";
+          } else {
+            wo_style += com.widgetIconDistance?.side ? "right:"+com.widgetIconDistance.side+'px;':'right:25px;';
+            wd.style.right = "25px";
+            wc.style.right = "25px";
+          }
+          wo_style += com?.widgetIconDistance?.bottom ? "bottom:"+com.widgetIconDistance.bottom+'px;':'bottom:25px;';
+        }
+      } else {
+        wo = createElement(
+          "div",
+          "widget-open",
+          "tc-widget widget-type rectangular-widget"
+        );
+        wo_span1.innerText = cm.text;
+        wo_style = "width:" + parseInt(cm.width, 10) + "px;" + "border-radius: 4px 4px 0px 0px;";
+      }
+    } else {
+      wd.style.left = "0";
+      wd.style.bottom = "0";
+      wd.style.width = "100%";
+      wd.style.right = "0";
+      wd.style.height = "91%";
+      if (cm.displayType == "circular") {
+        wo = createElement(
+          "div",
+          "widget-open",
+          "tc-widget widget-type circular-widget"
+        );
+        wo.setAttribute("title", cm.text);
+        wo.setAttribute("data-testid", widgetOpenTestId);
+        wo_span1.style.display = "none";
+        wo_style = "border-radius: 50%;" + "background-color:" + com.bgColor + ";";
+        if (com.placement) {
+          if (com.placement === "left") {
+            wo_style += "left: 25px;";
+          } else {
+            wo_style += "right: 25px;";
+          }
+        }
+      } else {
+        wo = createElement(
+          "div",
+          "widget-open",
+          "tc-widget widget-type rectangular-widget"
+        );
+        wo_span1.innerText = cm.text;
+        wo_style = "width:100%;" + "bottom:95vh;" + "border-radius: 4px 4px 0px 0px;";
+      }
+    }
+    setAttributes(wo, { onClick: "tc.funcs.toggleWidget(true)" });
+  
+    appendChilds(ele, wc, wo, wd);
+    appendChilds(wc, logoImgIcon, wc_span1, rightContainer); // Added rightContainer here
+    appendChilds(logoImgIcon, img);
+    hideSpeaker ? appendChilds(rightContainer, wc_span2 ): appendChilds(rightContainer, audioIcon, wc_span2 );
+   // appendChilds(rightContainer, audioIcon, wc_span2 ); // Added wc_span2 and audioIcon to rightContainer
+    appendChilds(wo, wo_logoImgIcon, wo_span1, wo_span2);
+    appendChilds(wo_logoImgIcon, wo_img);
+  
+    var img_style = "vertical-align: top;";
+    var wd_style_height;
+  
+    if (om.height >= 100 && !tc.lib.mobileDevice() && !isFullScreen) {
+      wd_style_height = parseInt(om.height, 10) + "px;";
+    }
+    if (om.height < 100 && !tc.lib.mobileDevice() && !isFullScreen) {
+      wd_style_height = parseInt(om.height, 10) + "vh;";
+    }
+    if (!tc.lib.mobileDevice() && !isFullScreen) {
+      var wc_wo_style = "background-color: " + com.headerColor,
+        wd_style = "width: " + parseInt(om.width, 10) + "px;height: " + wd_style_height,
+        wc_style = "bottom:" + wd_style_height + ";width: " + parseInt(om.width, 10) + "px;" + "border-radius: 4px 4px 0px 0px;";
+    } else {
+      var wc_wo_style = "background-color: " + com.headerColor,
+        wc_style = "bottom:0; top:0; left:0; width:100%;";
+  
+      var meta = document.createElement("meta");
+      meta.name = "viewport";
+      meta.content = "width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0";
+      document.getElementsByTagName("head")[0].appendChild(meta);
+    }
+  
+    tc.lib.applyCssSettings(img, img_style);
+    tc.lib.applyCssSettings(wc, wc_wo_style);
+    // tc.lib.applyCssSettings(wd,'height:'+ cw.height+'px');
+    var wo_wc_span = "font-size:" + com.fontSize + "px;color:" + config.common.fontColor + ";";
+  
+    // tc.lib.applyCssSettings(wc_span1,'font-size:'+ com.fontSize+'px;color:'+ com.fontColor+';');
+    // tc.lib.applyCssSettings(wo_span1,'font-size:'+ cw.titleTextFont+'px;color:'+ config.minimisedScreen.textColor+';');
+    tc.lib.applyCssSettings(wc_span1, wo_wc_span);
+    tc.lib.applyCssSettings(wo_span1, wo_wc_span);
+    tc.lib.applyCssSettings(wo, wc_wo_style);
+    tc.lib.applyCssSettings(wd, wd_style);
+  
+    tc.lib.applyCssSettings(wc, wc_style);
+    tc.lib.applyCssSettings(wo, wo_style);
+  
+    //Adding meta tag
+    if (conf.isResponsive == "Yes") {
+      var meta = document.createElement("meta");
+      meta.name = "viewport";
+      meta.content = "width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0";
+      document.getElementsByTagName("head")[0].appendChild(meta);
+    }
+  
+    if (com.imgDispType == "circular") {
+      //document.querySelector('.logo-img-icon').style.borderRadius = document.querySelector('.logo-img-icon').style.scrollWidth;
+      logoImgIcon.style.borderRadius = "40px";
+      wo_logoImgIcon.style.borderRadius = "40px";
+    }
+    /*if(wData && wData.wsurl){
+        //setting z-index of widget to 105
+        wd.style.zIndex = 105;
+        wc.style.zIndex = 105;
+        wo.style.zIndex = 105;
+      }*/
+    window.addEventListener("focus", function () {
+      if (wd && wd.style && wd.style.display == "block") {
+        tc.lib.events.send("iframe_widget", "topFocus");
+      }
+    });
+    window.addEventListener("blur", function () {
+      if (wd && wd.style && wd.style.display == "block") {
+        tc.lib.events.send("iframe_widget", "topBlur");
+      }
+    });
+    var rightElement = document.querySelector('#supportchatwidget .gs-right-close-icon');
+    if (isFullScreen) {
+      
+      window.gipMessengerPlugin?.openChat();
+      rightElement.style.display = 'none'; 
+      setTimeout(function (){
+        var ifPreChat = document.getElementById("gs-pre-chat-form");
+        var ifPreChatWrapper = document.getElementById("gs-pre-chat-form-wrapper");
+        
+        ifPreChat.style.height='100vh';
+        ifPreChat.style.width = '100vw';
+        ifPreChat.style.right = '0';
+        ifPreChat.style.bottom = '0';
+        ifPreChat.style.display = 'flex';
+        ifPreChat.style.justifyContent='center';
+        ifPreChat.style.alignItems = 'center';
+        ifPreChatWrapper.style.height='100vh';
+        ifPreChatWrapper.style.width='50%';
+        }, 1000);
+    } else {
+      rightElement.style.display = 'flex';
+    }
+  }
+  
+  
+  function mobileTemplate(ele) {
+    tc.lib.applyCssSettings(ele, "display:none;");
+    var wc = createElement("div", "widget-close", "tc-widget widget-fadeIn");
+    var wo;
+    var logoImgIcon = createElement("div", undefined, "logo-img-icon");
+    var img = createElement("img");
+    var span = createElement("span", "min-msg");
+    var wd = createElement("div", "widget", "tc-widget widget-fadeIn");
+    setAttributes(img, {
+      src: config.common.logo,
+      width: config.common.widgetIconSize.width,
+      height: config.common.widgetIconSize.height,
+    });
+    var cw = config.common;
+    var cs = config.content;
+    var cm = config.closeMode;
+    var conf = config.config;
+    var wo_style = "";
+    if (cm.displayType == "circular") {
+      wo = createElement(
+        "div",
+        "widget-open",
+        "tc-widget widget-type circular-widget"
+      );
+      wo.setAttribute("title", cm.text);
+      span.style.display = "none";
+      wo_style = "background-color: " + cw.bgColor + ";border-radius: 50%;";
+    } else {
+      wo = createElement(
+        "div",
+        "widget-open",
+        "tc-widget widget-type rectangular-widget"
+      );
+      span.innerText = cm.text;
+      wo_style =
+        "background-color: " +
+        cw.bgColor +
+        ";width:" +
+        parseInt(cm.width, 10) +
+        "px;" +
+        "border-radius: 4px 4px 0px 0px;";
+    }
+    setAttributes(wo, { onClick: "supportChatMobile()" });
+
+    appendChilds(ele, wc, wo, wd);
+    appendChilds(wo, logoImgIcon, span);
+    appendChilds(logoImgIcon, img);
+
+    var img_style = "vertical-align: top;";
+    // var wo_style = 'background-color: ' + cm.bgColor + ';width: ' + (parseInt(cw.width, 10)) + 'px;height: ' + (parseInt(cw.titleWinHeight, 10)) + 'px;border-color: ' + cw.borderColor + ';' + "border-radius: 4px 4px 0px 0px;";
+    tc.lib.applyCssSettings(img, img_style);
+    tc.lib.applyCssSettings(wo, wo_style);
+    tc.lib.applyCssSettings(
+      span,
+      "font-size:" + cw.fontSize + "px;color:" + cw.fontColor + ";"
+    );
+    if (conf.isResponsive == "Yes") {
+      var meta = document.createElement("meta");
+      meta.name = "viewport";
+      meta.content =
+        "width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0";
+      document.getElementsByTagName("head")[0].appendChild(meta);
+    }
+    if (cw.imgDispType == "circular") {
+      //document.querySelector('.logo-img-icon').style.borderRadius = document.querySelector('.logo-img-icon').style.scrollWidth;
+      logoImgIcon.style.borderRadius = "40px";
+    }
+  }
+  function startchat(iframe_id) {
+    if (typeof iframe_id == "string") {
+      tc.lib.events.send(iframe_id, "startchatevent");
+    } else {
+      tc.lib.events.send("iframe_widget", "startchatevent");
+    }
+  }
+  function req() {
+    var r = {
+      channel: "gipwebchannel",
+      sender: {
+        id: appId + "_" + senderId,
+        name: senderName,
+      },
+      recipient: {
+        id: appId,
+        name: "Bot",
+      },
+      message: {
+        text: "hi",
+        type: "text",
+      },
+      debugMode: debug,
+
+    };
+    return r;
+  }
+  function getConfig(uiSett) {
+    var std = getDefaultConfig();
+    var ret = undefined;
+    if (uiSett) {
+      return uiSett;
+    } else {
+      tc.lib.log("uiSettings not funnd. Taking default settings.");
+      return std;
+    }
+  }
+  function init(creds, cb, hideChatWidget) {
+   
+    // Listen for messages from the iframe
+    window.addEventListener(
+      "message",
+      function (event) {
+
+        // Handle the message
+        var message = event.data;
+        // Normalize the message to always be an object with an 'event' property
+        if (typeof message === 'string') {
+          message = { event: message };
+        }
+      
+        switch (message.event) {
+          case "openChat":
+            openChat(message.data);
+            break;
+          case "closeChat":
+            closeChat();
+            break;
+          case "showChatWidget":
+            showChatWidget();
+            break;
+          case "hideChatWidget":
+            hideChatWidget();
+            break;
+          case "minimizeChat":
+            minimizeChat();
+            break;
+          case "maximizeChat":
+            maximizeChat(message.data);
+            break;
+          case "toggleChatWidget":
+            toggleChatWidget();
+            break;
+
+        }
+      },
+      false
+    );
+
+    function openChat(initialData) {
+      var ifPreChat = document.getElementById("gs-pre-chat-form");
+      if(ifPreChat){
+        ifPreChat.style.display = 'none';
+      }
+      toggleWidget(true);
+      document.getElementById("widget-open").style.display = "none";
+      
+      hideWidget = true;
+      if(initialData){
+        if(initialData.prefilledText){
+          prefilledTextValue = initialData.prefilledText;
+        }
+      }  
+    }
+    
+
+    function closeChat() {
+      var ifPreChat = document.getElementById("gs-pre-chat-form");
+      if(ifPreChat){
+        ifPreChat.style.display = 'none';
+      }
+      toggleWidget(false);
+      document.getElementById("widget-open").style.display = "none";
+      hideWidget = true;
+    }
+
+    function showChatWidget() {
+      hidePrimaryChatWidget = false;
+      document.getElementById("widget-open").style.display = "block";
+    }
+
+    function hideChatWidget() {
+      document.getElementById("widget-open").style.display = "none";
+      hidePrimaryChatWidget = true;
+    }
+
+    function minimizeChat() {
+      var ifPreChat = document.getElementById("gs-pre-chat-form");
+      if(ifPreChat){
+        ifPreChat.style.display = 'none';
+      }
+      toggleWidget(false);
+      hideWidget = false;
+    }
+
+    function maximizeChat(initialData) {
+      var ifPreChat = document.getElementById("gs-pre-chat-form");
+      if(ifPreChat){
+        ifPreChat.style.display = 'none';
+      }
+      toggleWidget(true);
+      hideWidget = false;
+      
+    }
+
+    function toggleChatWidget() {
+      var widgetElement = document.getElementById("widget");
+      var ifPreChat = document.getElementById("gs-pre-chat-form");
+      if(ifPreChat){
+        ifPreChat.style.display = 'none';
+      }
+      if (
+        widgetElement &&
+        getComputedStyle(widgetElement).display === "none"
+      ) {
+        // If the element is present and display is "none", call toggleChat with false
+        toggleWidget(true);
+        
+      } else {
+        // If the element is not present or display is not "none", call toggleChat with true
+        toggleWidget(false);
+        
+      }
+    }
+
+    if (initialized) return false;
+    isWidgetUpandRunning = true;
+    if (!creds.appId && !appId) {
+      
+      return false;
+    }
+    if (creds.userObj && creds.userObj.sender && creds.userObj.sender.id) {
+      senderId = creds.userObj.sender.id;
+      senderName = creds.userObj.sender.name;
+    }
+    wData = creds;
+    if (creds.domain) {
+      domain = creds.domain;
+    }
+
+    config = getConfig(creds.appUISetting);
+    if (!config) {
+      config = {
+        openMode: { text: "Virtual Assistant", height: 390, width: 320 },
+        closeMode: {
+          text: "Virtual Assistant",
+          width: 250,
+          displayType: "rectangular",
+        },
+        common: {
+          logo: "https://www.gupshup.io/images/botwidget/ic_dummy_chat_g.png",
+          imgDispType: "circular",
+          bgColor: "#E7E6FF",
+          headerColor: "#5956D6",
+          fontSize: 16,
+          fontColor: "#fff",
+          chatBackgroundImage: "",
+          button:{},
+          font:{}
+        },
+        content: {
+          bot: "https://www.gupshup.io/images/botwidget/ic_bot.png",
+          botBubbleColor: "#F5F3FF",
+          botFontColor: "#797979",
+          user: "https://www.gupshup.io/images/botwidget/ic_user.png",
+          userBubbleColor: "#C7C6FF",
+          userFontColor: "#000",
+          pageTitle: "Chat Bot",
+          fontSize: 14,
+          fontFamily: "sans-serif",
+        },
+        config: {
+          persistenceMenu: {},
+          perMenuImg: "",
+          attachment: "Yes",
+          widgetType: "Text",
+          msgEnc: "No",
+          webView: "Yes",
+          RDStatus: "No",
+          isResponsive: "No",
+          
+        },
+      };
+    }
+    if (cb instanceof Function) {
+      initialized = true;
+      return cb();
+    }
+    var div = createElement("div", "supportchatwidget");
+    document.body.appendChild(div);
+    template(div);
+      // Get the element with the ID supportChatWidget
+
+      createIframe("widget");
+      callbackFun = function (e) {
+        // console.log("receiving", e);
+        if (e) {
+          if (e.data.event == "ready") {
+            // console.log('I am ready');
+            isAppReady = true;
+            tc.lib.events.send("iframe_widget", "data");
+          } else if (e.data.event == "bw") {
+            if (e.data.message == "hide") {
+              tc.lib.log("Disappering... Bye");
+              tc.lib.applyCssSettings(
+                document.querySelector("#supportchatwidget"),
+                "display: none;"
+              );
+            } else if (typeof e.data.message && e.data.message.newMsg) {
+             // console.log("Got New Message");
+            //  showNoty(e.data.message.newMsg);
+            }
+          }
+      };
+    }
+      tc.lib.events.init("iframe_widget", "play", callbackFun);
+      // Check if newDiv already exists
+      var existingDiv = document.querySelector(".bot-log");
+      // If newDiv exists, remove it
+      if (existingDiv) {
+        existingDiv.remove();
+        isBotLogVisible = false;
+      } else {
+        // Create a new div element
+        var newDiv = document.createElement("div");
+        // Apply class name to the main div
+        newDiv.className = "bot-log";
+        newDiv.id = "bot-log";
+        if (config.common.placement==='left'){
+          newDiv.style.left = config.openMode.width?config.openMode.width+30+'px' : '27%';
+        }
+        if (config.common.placement==='right'){
+          newDiv.style.right = config.openMode.width?config.openMode.width+30+'px' : '27%';
+        }
+        // Create a new div for the header
+        var headerDiv = document.createElement("div");
+
+        // Apply class name to the header div
+        headerDiv.className = "bot-log-header";
+        // Add text to the header div
+        var headerText = document.createElement("span");
+        headerText.textContent = "Message Logs";
+        headerText.style.textAlign = "left"; // Align text to the left
+
+        // Append the text to the header div
+        headerDiv.appendChild(headerText);
+        // Create a close icon
+        var closeIcon = document.createElement("span");
+
+        // Apply class name to the close icon
+        closeIcon.className = "bot-log-widget-close-icon";
+
+        // Append the close icon to the header div
+        headerDiv.appendChild(closeIcon);
+
+        // Add click event listener to the close icon
+        closeIcon.addEventListener("click", function () {
+          // Remove the newDiv from the DOM
+          newDiv.style.display = "none";
+        });
+        // Append the header div inside the newDiv
+        newDiv.appendChild(headerDiv);
+
+        // Create a content div
+        var contentDiv = document.createElement("div");
+        contentDiv.className = "bot-log-content-main";
+        contentDiv.id = "bot-log-content-main";
+
+        // Append the content div inside the newDiv
+        newDiv.appendChild(contentDiv);
+        // Append the newDiv to the parent body
+        document.body.appendChild(newDiv);
+        newDiv.style.display = "none";
+      }
+      window.addEventListener("message", function (event) {
+        if (event.data.action) {
+          var botLogData = event.data;
+          if (botLogData.action === "showBotLogDiv") {
+            newDiv.style.display = "block";
+            createIframeBotLog("bot-log-content-main", botLogData.message);
+          }
+        }
+      });
+      window.addEventListener("message", function (event) {
+        if (event.data.action) {
+          var botLogDataModal = event.data;
+          if (botLogDataModal.action === "openBotLogModal") {
+            botLogModal(botLogDataModal.payload);
+          }
+        }
+      });
+      
+
+    // document.body.appendChild(div);
+    setTimeout(function () {
+      document.getElementById("supportchatwidget").style.display = "block";
+    }, 1000);
+    hideWidget
+      ? (document.getElementById("widget-open").style.display = "none")
+      : (document.getElementById("widget-open").style.display = "block");
+    initialized = true;
+  
+    if(isPageRefreshed){
+      window.dispatchEvent(new Event("gipMessengerPluginReady"));
+    }
+  
+  }
+
+  function resetWidgetInit(val) {
+    initialized = val;
+  }
+  function setNewConfig(c) {
+    config = c;
+    // return callbackFun;
+  }
+  // Function to extract query parameters from URL
+  function getQueryParam(url, param) {
+    var queryParams = new URLSearchParams(new URL(url).search);
+    return queryParams.get(param);
+  }
+  // Function to decode JWT token and get expiration timestamp
+  
+  function AutoInitialized(d, id, secondAppId) {
+    
+    var script = document.getElementById("gs-sdk");
+    var fun;
+    if (script) {
+      fun = script.getAttribute("callback");
+    } else {
+      fun = "tcAsyncInit";
+    }
+    if (!script) {
+      if (window[fun] instanceof Function) {
+        window[fun]();
+      }
+     
+      return false;
+    }
+    if (!d.getElementById("gs-css") && fun != "localhost") {
+      var tjs = d.getElementsByTagName("script")[0];
+      css = d.createElement("link");
+      css.id = id;
+      css.type = "text/css";
+      css.rel = "stylesheet";
+      var ts = new Date().getTime();
+      css.href = domain + "/v3/demo/static/css/style.css?ts=" + ts;
+      tjs.parentNode.insertBefore(css, tjs);
+    }
+    var currentUrl = window.location.href;
+    var isSpeechToTextEnabled = false;
+    var isTextToSpeech = {};
+    var refKey = script.getAttribute("ref");
+  
+    // Use secondAppId if it has a value
+    if (secondAppId) {
+      aId = secondAppId;
+    } else {
+      // Check if appId in script tag
+      if (script.getAttribute("appId")) {
+        aId = script.getAttribute("appId");
+      }
+      // Check if appId in URL
+      if (getQueryParam(currentUrl, "appId")) {
+        aId = getQueryParam(currentUrl, "appId");
+      }
+    }
+
+    if (script.getAttribute("hideChatWidget") === "true") {
+      hideWidget = true;
+      // Create a new <style> element
+      var style = document.createElement('style');
+
+      // Add the CSS rule with !important using string concatenation
+      style.innerHTML = 
+      '#supportchatwidget .circular-widget, ' +
+      '#supportchatwidget .circular-widget .logo-img-icon, ' +
+      '#widget-open {' +
+      '  display: none !important;' +
+      '}';
+     
+      
+      // Append the <style> element to the document's <head>
+      document.head.appendChild(style);
+    }
+
+    //check if data test id present
+    if (script.getAttribute("testid")) {
+      widgetOpenTestId = script.getAttribute("testid");
+    }
+   
+    if (script.getAttribute("debug")) {
+      debug = script.getAttribute("debug");
+      if (debug === "true") {
+        debug = true;
+        sessionStorage.setItem('debug',true);
+      } 
+      else {
+        debug = false;
+        sessionStorage.setItem('debug',false)
+      }
+    }
+
+    // check if debug in url
+    if (getQueryParam(currentUrl, "debug")) {
+      debug = getQueryParam(currentUrl, "debug");
+      if (debug === "true") {
+        debug = true;
+        sessionStorage.setItem('debug',true);
+      } 
+
+    }
+
+    if (refKey) {
+      ref = refKey;
+    }
+    if (aId) {
+      sessionStorage.setItem("appId", aId);
+      appId = aId;
+   
+          if (window[fun] instanceof Function) {
+            window[fun]({
+              init: init,
+              toggleWidget: toggleWidget,
+              getRedirectUrl: getRedirectUrl,
+              supportChatMobile: supportChatMobile,
+              startchat: startchat,
+              nconfig: setNewConfig,
+              resetWidgetInit: resetWidgetInit,
+            });
+          } 
+          else {
+            if (!aId) {
+              
+              return false;
+            }
+            var cred = {};
+            function getAsthetics(){
+                var req = {
+                  method: "GET",
+                  //url: ccurl+"/api/bot/"+botkey+"/botconfig",
+                  url:
+                    sessionStorage.getItem("hostName") +
+                    "identity/v2/app/" +
+                    aId +
+                    "/widget/settings",
+                    headers: {
+                      'Authorization': accessToken,  // Add the Authorization header
+                      'Content-Type': 'application/json'         // Optional: Specify content type
+                    }
+                };
+              
+                tc.lib.xhrReq(req, function (res) {
+                  cred = {
+                    appUISetting: {
+                      openMode: {
+                        text: "Virtual Assistant",
+                        height: 390,
+                        width: 320,
+                      },
+                      closeMode: {
+                        text: "Virtual Assistant",
+                        width: 250,
+                        displayType: "circular",
+                      },
+                      common: {
+                        logo: "https://gs-upload.gupshup.io/gip/icons/widget-icon-1.svg",
+                        
+                        bgColor: "#E7E6FF",
+                        headerColor: "#5956D6", 
+                        fontSize: 16,
+                        fontColor: "#fff",   //displayNameFontColor
+                        chatBackgroundImage: "",
+                        imgDispType: "circular",
+                        placement: "right",
+                        button:{},
+                        widgetIconSize:{
+                          "height": 45,
+                          "width": 45
+                        },
+                        widgetIconDistance:{
+                          side: 25,
+                          bottom:25
+                        }
+                        
+                      },
+                      content: {
+                        bot: "https://gs-upload.gupshup.io/gip/avatars/bot-avatar-1.svg",
+                        botBubbleColor: "#F5F3FF",
+                        user: "https://www.gupshup.io/images/botwidget/ic_user.png",
+                        userBubbleColor: "#C7C6FF",
+                        pageTitle: "Chat Bot",
+                        fontSize: 14,
+                        fontFamily: "sans-serif",
+                        displayNameFontSize: 16,
+                        botMessageFontSize:14,
+                        userMessageFontSize:14,
+                        userFontColor: "#000", //userMessageFontColor
+                        botFontColor: "#797979", //botMessageFontColor
+                        displayNameFontColor: "#fff"
+
+                      },
+                      config: {
+                        persistenceMenu: {},
+                        perMenuImg: "",
+                        attachment: "Yes",
+                        widgetType: "Text",
+                        msgEnc: "No",
+                        webView: "Yes",
+                        RDStatus: "No",
+                        isResponsive: "No",
+                        speech:{},
+                        
+                      }   
+                    },
+                  };
+                  if (res.status === 401) {
+                    console.log('Access token expired, refreshing token...');
+                    fetchAccessToken(function(){getAsthetics()},aId+'_'+senderId);
+                  } else if (res.status < 300 && res.response) {
+                    try {
+                      
+                    var config = JSON.parse(res.response);
+                    astheticsData = JSON.parse(res.response);
+                      if (config.hasOwnProperty('preferences') && config.preferences.hasOwnProperty('persistChat')) {
+                        if (config.preferences.persistChat === false) {
+                            localStorage.removeItem('userId');
+                        }
+                      }
+                    
+                      if (config.persistentMenu.hasOwnProperty("data")) {
+                        
+                        if(config.persistentMenu.data.length){
+                          cred.appUISetting.config.persistenceMenu = {
+                            disableinput: false,
+                            menu: config.persistentMenu.data,
+                          };
+                        }
+                        
+                      }
+                      if(config.hasOwnProperty('speech')){
+                        cred.appUISetting.config.speech = config.speech;
+                      }
+                      if(config.hasOwnProperty('preChat')){
+                       
+                        preChat = config.preChat[0]
+                      }
+                      if(config.hasOwnProperty('widgetIconDistance')){
+                        cred.appUISetting.config.speech = config.speech;
+                      }
+                        
+                      if (
+                        !tc.lib.isEmpty(config) &&
+                        config.aesthetics.hasOwnProperty("displayName")
+                      ) {
+                        cred.appUISetting.closeMode.text = config.aesthetics.displayName;
+                        cred.appUISetting.openMode.text = config.aesthetics.displayName;
+                        cred.appUISetting.content.bot = config.aesthetics.botAvatarImage;
+                        cred.appUISetting.content.widget = config.aesthetics.widgetIcon;
+                        //colors
+                        cred.appUISetting.content.botBubbleColor = config.aesthetics.botMessageBubbleColor;
+                        cred.appUISetting.content.userBubbleColor = config.aesthetics.userMessageBubbleColor;
+                        cred.appUISetting.common.headerColor = config.aesthetics.headerColor;
+                        cred.appUISetting.common.bgColor = config.aesthetics.chatBackgroundColor;
+    
+    
+                        config.aesthetics.chatBackgroundImage ? (cred.appUISetting.common.chatBackgroundImage = config.aesthetics.chatBackgroundImage) : "";
+                        //fonts Size
+                        config.aesthetics.botMessageFontSize ? (cred.appUISetting.content.fontSize = config.aesthetics.botMessageFontSize) : "";
+                        config.aesthetics.userMessageFontSize ? (cred.appUISetting.content.fontSize = config.aesthetics.userMessageFontSize) : "";
+                        config.aesthetics.displayNameFontSize
+                          ? (cred.appUISetting.common.fontSize = config.aesthetics.displayNameFontSize) : "";
+
+                        //widget
+                        config.aesthetics.widgetDisplayType ? (cred.appUISetting.common.imgDispType =
+                            config.aesthetics.widgetDisplay)
+                          : "";
+
+                          config.aesthetics.widgetPosition ? (cred.appUISetting.common.placement =
+                            config.aesthetics.widgetPosition)
+                          : "";  
+                         
+                          config.aesthetics.widgetIconSize ? cred.appUISetting.common.widgetIconSize = config.aesthetics.widgetIconSize : '';
+
+                          config.aesthetics.widgetIconDistance ? cred.appUISetting.common.widgetIconDistance = config.aesthetics.widgetIconDistance : '';
+
+
+                        config.aesthetics.openMode  ? (cred.appUISetting.openMode.height = config.aesthetics.openMode.height): "";
+                        config.aesthetics.openMode
+                          ? (cred.appUISetting.openMode.width =
+                            config.aesthetics.openMode.width)
+                          : "";
+                        config.aesthetics.closeMode
+                          ? (cred.appUISetting.closeMode.width =
+                            config.aesthetics.closeMode.width)
+                          : "";
+
+                       //font color
+                        config.aesthetics.displayNameFontColor
+                          ? (cred.appUISetting.common.fontColor =
+                            config.aesthetics.displayNameFontColor)
+                          : "";
+                        config.aesthetics.userMessageFontColor
+                          ? (cred.appUISetting.content.userFontColor =
+                            config.aesthetics.userMessageFontColor)
+                          : "";
+                        config.aesthetics.botMessageFontColor
+                          ? (cred.appUISetting.content.botFontColor =
+                            config.aesthetics.botMessageFontColor)
+                          : "";
+                        cred.appUISetting.common.logo = config.aesthetics.widgetIcon;
+
+                        //button
+                        config.aesthetics.button ? (cred.appUISetting.common.button = config.aesthetics.button) : "";
+
+                        //widget icon
+
+                      } else if (!tc.lib.isEmpty(config.aesthetics)) {
+                        tc.lib.log("Please re-deploy the widget");
+                      }
+                      
+                      init(cred);
+                      //  }
+                      // });
+                    } catch (e) {
+                      tc.lib.log(
+                        "uiSettings not found. Please save the settings first at widget config."
+                      );
+                    }
+                  } else {
+                   // console.log("Error in get");
+                  }
+    
+                });
+              }
+            if (!accessToken) {
+             
+              fetchAccessToken(function(){getAsthetics()},aId+'_'+senderId);
+            }
+            
+            
+          }
+    }
+  }
+
+  function botLogModal(variables) {
+    // Create the parent modal element
+    var botLogModal = document.createElement("div");
+    botLogModal.id = "mybotLogModal";
+    botLogModal.classList.add("bot-log-modal");
+
+    // Create the modal content div
+    var modalContent = document.createElement("div");
+    modalContent.classList.add("bot-log-modal-content");
+
+    // Create the modal box div
+    var modalBox = document.createElement("div");
+    modalBox.classList.add("modal-box");
+
+    // Create the modal header div
+    var modalHeader = document.createElement("div");
+    modalHeader.classList.add("modal-header");
+
+    // Create the modal title box div
+    var modalTitleBox = document.createElement("div");
+    modalTitleBox.classList.add("modal-title-box");
+    modalTitleBox.innerHTML =
+      "<div>All Variables</div><div id='bot-log-tooltip' class='bot-log-tooltip'><div class='question_ic'></div><span class='bot-log-tooltiptext'>All current assigned variable values can be seen from this section. These value will get updated during bot runtime.</span></div>";
+
+    // Create the close icon span
+    var closeIcon = document.createElement("span");
+    closeIcon.classList.add("bot-log-close-icon", "modal-bot-log-close-icon");
+    closeIcon.addEventListener("click", function () {
+      closeBotLogModal();
+    });
+
+    // Append the modal title box and close icon to the modal header
+    modalHeader.appendChild(modalTitleBox);
+    modalHeader.appendChild(closeIcon);
+
+    // Create the modal content div
+    var modalContentDiv = document.createElement("div");
+    modalContentDiv.classList.add("modal-content");
+
+    // Create the form group modal div
+    var formGroupModal = document.createElement("div");
+    formGroupModal.classList.add("form-group-modal");
+
+    // Create the search input box
+    var searchInputBox = document.createElement("div");
+    searchInputBox.classList.add("search-inpt-box");
+    searchInputBox.innerHTML =
+      "<input type='text' class='searchBox' placeholder='Search here'>";
+
+    // Create the custom select box
+    var customSelectBox = document.createElement("div");
+    customSelectBox.classList.add("custom-select-box");
+    customSelectBox.innerHTML =
+      "<label for='exampleSelect' class='selected-label'></label><div class='select-wrapper'><div class='custom-select' id='exampleSelect'><div class='selected-option'>Select type</div><ul class='gs-custom-options'><li data-value='' class='default-option'>Select type</li><li data-value='local'>Local</li><li data-value='global'>Global</li><li data-value='system'>System</li></ul></div></div>";
+
+    // Append the search input box and custom select box to the form group modal
+    formGroupModal.appendChild(searchInputBox);
+    formGroupModal.appendChild(customSelectBox);
+
+    // Create the search list div
+    var searchList = document.createElement("div");
+    searchList.classList.add("search-list");
+
+    // Create the table container div
+    var tableContainer = document.createElement("div");
+    tableContainer.classList.add("table-container");
+
+    // Create the table
+    var table = document.createElement("table");
+    table.id = "dataTable";
+    table.innerHTML =
+      "<thead><tr><th>Name</th><th>Value</th></tr></thead><tbody id='tableBody'></tbody>";
+
+    // Create the select wrapper table div
+    var selectWrapperTable = document.createElement("div");
+    selectWrapperTable.classList.add("select-wrapper-table");
+    selectWrapperTable.innerHTML =
+      "Show <select id='exampleSelect'><option value='10'>10</option><option value='20'>20</option><option value='30'>30</option></select><div id='pagination'></div>";
+
+    // Append the table to the table container
+    tableContainer.appendChild(table);
+    tableContainer.appendChild(selectWrapperTable);
+
+    // Append the table container to the search list
+    searchList.appendChild(tableContainer);
+
+    // Append the form group modal and search list to the modal content div
+    modalContentDiv.appendChild(formGroupModal);
+    modalContentDiv.appendChild(searchList);
+
+    // Append the modal header and modal content to the modal box
+    modalBox.appendChild(modalHeader);
+    modalBox.appendChild(modalContentDiv);
+
+    // Append the modal box to the modal content
+    modalContent.appendChild(modalBox);
+
+    // Append the modal content to the bot log modal
+    botLogModal.appendChild(modalContent);
+
+    // Append the bot log modal to the document body
+    document.body.appendChild(botLogModal);
+
+    // Show the modal
+    document.getElementById("mybotLogModal").style.display = "block";
+    var allVariables = variables;
+    var outputArray = Object.entries(allVariables).map(function (entry) {
+      var name = entry[0];
+      var value = entry[1];
+      return {
+        name: name,
+        value: JSON.stringify(value),
+      };
+    });
+
+    // Find the closest parent with class "bot-log-accordion-item"
+    // var accordionItem = button.closest(".bot-log-accordion-item");
+
+    var selectWrapper = document.querySelector(".select-wrapper");
+    var select = document.getElementById("exampleSelect");
+    var selectedOption = select.querySelector(".selected-option");
+    var options = select.querySelectorAll(".gs-custom-options li");
+
+    select.addEventListener("click", function () {
+      selectWrapper.classList.toggle("open");
+    });
+
+    options.forEach(function (option) {
+      option.addEventListener("click", function (event) {
+        event.stopPropagation(); // Prevent click event propagation
+        var value = this.getAttribute("data-value");
+        selectedOption.textContent = this.textContent;
+        select.value = value;
+        selectWrapper.classList.remove("open");
+      });
+    });
+
+    // Close the options when clicking outside the select wrapper
+    document.addEventListener("click", function (event) {
+      if (!selectWrapper.contains(event.target)) {
+        selectWrapper.classList.remove("open");
+      }
+    });
+
+    jsonData = outputArray;
+
+    tableBody = document.getElementById("tableBody");
+    pagination = document.getElementById("pagination");
+    searchInput = document.getElementById("searchInput");
+    rowsPerPage = 10;
+    currentPage = 1;
+    filteredData = jsonData;
+
+    displayData();
+    // Get all elements with the class 'searchBox'
+    var searchBoxes = document.querySelectorAll(".searchBox");
+
+    // Loop through each search box element
+    searchBoxes.forEach(function (searchBox) {
+      // Add event listener for the 'input' event
+      searchBox.addEventListener("input", function (event) {
+        // Call the filterData function and pass the event object
+        filterData(event);
+      });
+    });
+  }
+
+  function closeBotLogModal() {
+    document.getElementById("mybotLogModal").style.display = "none";
+  }
+  function displayData() {
+    var startIndex = (currentPage - 1) * rowsPerPage;
+    var endIndex = startIndex + rowsPerPage;
+    var paginatedData = filteredData.slice(startIndex, endIndex);
+
+    tableBody.innerHTML = "";
+    paginatedData.forEach(function (item) {
+      var row = document.createElement("tr");
+      row.innerHTML = "<td>" + item.name + "</td><td>" + item.value + "</td>";
+
+      tableBody.appendChild(row);
+    });
+
+    renderPagination();
+  }
+
+  function renderPagination() {
+    pagination.innerHTML = "";
+
+    var totalPages = Math.ceil(filteredData.length / rowsPerPage);
+
+    // Previous Button
+    var prevBtn = document.createElement("button");
+    prevBtn.textContent = "Prev";
+    prevBtn.addEventListener("click", function () {
+      if (currentPage > 1) {
+        currentPage--;
+        displayData();
+      }
+    });
+    pagination.appendChild(prevBtn);
+
+    // Next Button
+    var nextBtn = document.createElement("button");
+    nextBtn.textContent = "Next";
+    nextBtn.addEventListener("click", function () {
+      if (currentPage < totalPages) {
+        currentPage++;
+        displayData();
+      }
+    });
+    pagination.appendChild(nextBtn);
+  }
+
+  function filterData(event) {
+    var inputCharacter = event.target.value;
+    var searchString = inputCharacter.trim();
+    filteredData = jsonData.filter(function (item) {
+      return (
+        item.name.toLowerCase().includes(searchString.toLowerCase()) ||
+        item.value.toLowerCase().includes(searchString.toLowerCase())
+      );
+    });
+    displayData();
+  }
+
+
+  // Close the modal when the user clicks on <span> (x)
+  // span.onclick = closeModal;
+
+  // Close the modal when the user clicks anywhere outside of the modal
+  //   window.onclick = function (event) {
+  //     if (event.target == modal) {
+  //       closeModal();
+  //     }
+  //   };
+ 
+
+  setTimeout(function () {
+    
+    AutoInitialized(document, "gs-css");
+    window.addEventListener("message", function (event) {
+      if (typeof event.data === "object" && event.data.event) {
+        switch (event.data.event) {
+          case "setUserId":
+            isPageRefreshed = false;
+            accessToken = null;
+            var ifPreChat = document.getElementById("gs-pre-chat-form");
+            var isTermsBoxChecked = document.getElementById("gs-terms-checkbox");
+            var userIdData = event.data.data;
+            senderId = userIdData;
+            localStorage.removeItem('userId');
+            localStorage.removeItem('preChatCompleted');
+            preChat=null;
+            tc.devbox.isIframeInitialized = false;
+            isAuthenticatedUser = true;
+            initialized = false;
+            secondAppButtonClicked = false;
+              if(event.data.hasOwnProperty('extradata')){
+                extraData = event.data.extradata
+              }
+              
+            
+            
+            if (ifPreChat) {
+              ifPreChat.style.display = "none";
+            }
+            if(isTermsBoxChecked){
+              if(isTermsBoxChecked.value){
+                isTermsBoxChecked.value = false;
+              }
+            }
+            
+            toggleWidget(false);
+            AutoInitialized(document, "gs-css");
+            tc.lib.events.send("iframe_widget", "startchatevent");
+            break;
+          case "showSecondChat":
+              secondAppButtonClicked = true;
+              accessToken = null;
+              sessionStorage.setItem('access_token','');
+              var appInfo = event.data.data;
+              var secondaryAppId = appInfo.appId;
+              
+            // Your condition for showing the second chat
+            if (secondaryAppId) {
+              
+              isPageRefreshed = false;
+              localStorage.removeItem('userId');
+              tc.devbox.isIframeInitialized = false;
+              //isAuthenticatedUser = true;
+              initialized = false;
+              var ifPreChat = document.getElementById("gs-pre-chat-form");
+              if(ifPreChat){
+                ifPreChat.style.display = 'none';
+              }
+              var existingDiv = document.querySelector(".bot-log");
+              // If newDiv exists, remove it
+              if (existingDiv) {
+                existingDiv.remove();
+                isBotLogVisible = false;
+              }
+              toggleWidget(false);
+              var element = document.getElementById("supportchatwidget");
+              
+              // Check if the element exists in the DOM
+              if (element) {
+                  // Remove the element from the DOM
+                  element.parentNode.removeChild(element);
+              }
+              AutoInitialized(document, "gs-css", secondaryAppId );
+              tc.lib.events.send("iframe_widget", "startchatevent");
+              
+              setTimeout(function(){
+                isSecondAppOpen = true;
+                toggleWidget(true);
+              },1000)
+            }
+            if(appInfo.prefilledText){
+              prefilledTextValue = appInfo.prefilledText;
+            }
+            break;
+        }
+      } else if (typeof event.data === "string") {
+        switch (event.data) {
+          case "removeUserId":
+            isPageRefreshed = false;
+            accessToken = null;
+            localStorage.removeItem('userId');
+            localStorage.removeItem('preChatCompleted');
+            preChat=null;
+            var ifPreChat = document.getElementById("gs-pre-chat-form");
+              if(ifPreChat){
+                ifPreChat.style.display = 'none';
+              }
+            sessionStorage.removeItem('senderId');
+            senderId = "anon:" + tc.lib.uuid();
+            userId = senderId;
+            localStorage.setItem('userId', senderId);
+            tc.devbox.isIframeInitialized = false;
+            isAuthenticatedUser = false;
+            initialized = false;
+            
+            toggleWidget(false);
+            AutoInitialized(document, "gs-css");
+            tc.lib.events.send("iframe_widget", "startchatevent");
+            break;
+        }
+      }
+    });
+   
+  }, 200);
+
+  return {
+    init: init,
+    toggleWidget: toggleWidget,
+    getRedirectUrl: getRedirectUrl,
+    supportChatMobile: supportChatMobile,
+    startchat: startchat,
+    nconfig: setNewConfig,
+    resetWidgetInit: resetWidgetInit,
+
+  };
+})();
+toggleWidget = tc.funcs.toggleWidget;
+tc.init = tc.funcs.init;
+var supportChatMobile = tc.funcs.supportChatMobile;
+tc.devbox = {
+  "startchat": tc.funcs.startchat,
+  "isIframeInitialized": false,
+  "iframeUrl": ""
+};
